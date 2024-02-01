@@ -1,0 +1,6 @@
+torch
+matplotlib
+tqdm
+jupyter
+POT
+scikit-learn
