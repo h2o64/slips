@@ -157,14 +157,12 @@ def integration_step_mc_est(y_k, mc_est, t_k_p_1, t_k, sigma, alpha, use_exponen
 	"""
 
 	delta = t_k_p_1 - t_k
-	# if use_exponential_integrator:
-	# 	y_k_p_1 = y_k + (alpha.alpha(t_k_p_1) - alpha.alpha(t_k)) * mc_est(y_k, t_k, sigma, alpha)
-	# 	y_k_p_1 += sigma * math.sqrt(delta) * torch.randn_like(y_k_p_1)
-	# else:
-	# 	y_k_p_1 = y_k + delta * alpha.alpha_dot(t_k) * mc_est(y_k, t_k, sigma, alpha)
-	# 	y_k_p_1 += sigma * math.sqrt(delta) * torch.randn_like(y_k_p_1)
-	y_k_p_1 = y_k + delta * alpha.alpha_dot(t_k) * mc_est(y_k, t_k, sigma, alpha)
-	y_k_p_1 += sigma * math.sqrt(delta) * torch.randn_like(y_k_p_1)
+	if use_exponential_integrator:
+		y_k_p_1 = y_k + (alpha.alpha(t_k_p_1) - alpha.alpha(t_k)) * mc_est(y_k, t_k, sigma, alpha)
+		y_k_p_1 += sigma * math.sqrt(delta) * torch.randn_like(y_k_p_1)
+	else:
+		y_k_p_1 = y_k + delta * alpha.alpha_dot(t_k) * mc_est(y_k, t_k, sigma, alpha)
+		y_k_p_1 += sigma * math.sqrt(delta) * torch.randn_like(y_k_p_1)
 	return y_k_p_1
 
 def integration_step_mc_est_grad(y_k, mc_est, t_k_p_1, t_k, sigma, alpha, use_exponential_integrator):

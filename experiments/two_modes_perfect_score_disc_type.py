@@ -5,8 +5,28 @@ from slips.samplers.sto_loc import sto_loc_algorithm
 from slips.samplers.alphas import *
 from two_modes_utils import make_target, compute_metrics_mog, stack_metrics
 
-# Run the experiment
 def run_experiment(device, dim, target, sigma, nabla_log_p_t, batch_size, K, T, epsilon, epsilon_end, alpha, em_only):
+	"""Run the experiment
+
+	Args:
+		device (torch.Device): Device to use for the computations
+		dim (int): Dimension of the target
+		target (slips.distributions.*): Target distribution
+		sigma (float): Value of sigma
+		nabla_log_p_t (function): Perfect score
+		batch_size (int): Number of samples to draw
+		sigma (float): Value of sigma
+		K (int): Computationnal budget
+		T (float): Theoretical end time
+		epsilon (float): Starting time
+		epsilon_end (float): Gap between the theoretical end time and the practical one
+		alpha (Alpha): Alpha value
+		em_only (bool): Whether to force EM algorithm
+
+	Returns:
+		results_uniform (list of metrics): Progressive metrics with uniform time 
+		results_adapted (list of metrics): Progressive metrics with adapted time 
+	"""
 
 	# Get the mean and covs of Y_t
 	def get_means_covs(t):

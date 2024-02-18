@@ -8,8 +8,27 @@ from slips.samplers.alphas import *
 from two_modes_utils import make_target, compute_metrics_mog
 from slips.samplers.mcmc import MCMCScoreEstimator
 
-# Run the experiment
 def run_exp(device, batch_size, target, dim, score_est, score_type, sigma, alpha, K, T, epsilon, epsilon_end, n_langevin_steps):
+	"""Run the experiment
+
+	Args:
+		device (torch.Device): Device to use for the computations
+		batch_size (int): Number of samples
+		target (slips.distributions.*): Target distribution
+		dim (int): Dimension of the target
+		score_est (function): Score estimator
+		score_type (str): Type of score estimator
+		sigma (float): Value of sigma
+		alpha (Alpha): Alpha value
+		K (int): Computationnal budget
+		T (float): Theoretical end time
+		epislon (float): Starting time
+		epsilon_end (float): Gap between the theoretical end time and the practical one
+		n_langevin_steps (int): Number of langevin steps for Langevin-within-Langevin
+
+	Returns:
+		metrics (dict): GMM metrics
+	"""
 
 	# Sample the target distribution
 	target_samples = target.sample((batch_size,))

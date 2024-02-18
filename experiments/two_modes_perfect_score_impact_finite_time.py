@@ -10,6 +10,26 @@ from two_modes_utils import make_target, compute_metrics_mog
 
 # Run the experiment
 def run_experiment(device, batch_size, dim, target, target_samples, nabla_log_p_t, sigma, K_range, alpha_range, epsilon_classic, T_classic, em_only):
+	"""Run the experiment
+
+	Args:
+		device (torch.Device): Device to use for the computations
+		batch_size (int): Number of samples to draw
+		dim (int): Dimension of the target
+		target (slips.distributions.*): Target distribution
+		target_samples (torch.Tensor of shape (batch_size, *data_shape)): Exact samples from the target distribution
+		nabla_log_p_t (function): Perfect score
+		sigma (float): Value of sigma
+		K_range (torch.Tensor): Range of computationnal budgets
+		alpha_range (list of Alpha): Different alpha values
+		epsilon_classic (float): Time of initial SNR
+		T_classic (float): Time of final SNR
+		T (float): Theoretical end time
+		em_only (bool): Whether to force EM algorithm
+
+	Returns:
+		results (list of dict): List of metrics
+	"""
 
 	# Browse all the possibilities
 	results = []

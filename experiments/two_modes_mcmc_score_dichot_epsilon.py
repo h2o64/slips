@@ -10,19 +10,54 @@ from slips.samplers.mcmc import MCMCScoreEstimator
 
 # Binary search
 def binary_search(metric, low, high, target_value, n_attemps):
-    for _ in trange(n_attemps):
-        # Get the middle point
-        mid = (low + high) / 2.
-        ret = metric(mid)
-        # Check the different conditions
-        if ret < target_value:
-            low = mid
-        else:
-            high = mid
-    return (low + high) / 2.
+	"""Basic binary search
 
-# Run the experiment
+	Args:
+		metric (function): Increasing function to evaluate
+		low (float): Lower end
+		high (float): Higher end
+		target_value (float): Target value
+		n_attemps (int): Number of attemps
+
+	Returns:
+		idx (float): Target idx
+	"""
+
+	for _ in trange(n_attemps):
+	    # Get the middle point
+	    mid = (low + high) / 2.
+	    ret = metric(mid)
+	    # Check the different conditions
+	    if ret < target_value:
+	        low = mid
+	    else:
+	        high = mid
+	return (low + high) / 2.
+
 def metric(epsilon, device, batch_size, target, dim, score_est, score_type, sigma, alpha, K, T, epsilon_end, return_metrics=False):
+	"""Run the experiment
+
+	Args:
+		epsilon (float): Initial integration time
+		device (torch.Device): Device to use for the computations
+		batch_size (int): Number of samples
+		target (slips.distributions.*): Target distribution
+		score_est (function): Score estimator
+		score_type (str): Type of score estimator
+		sigma (float): Value of sigma
+		alpha (Alpha): Alpha value
+		K (int): Computationnal budget
+		T (float): Theoretical end time
+		epsilon_end (float): Gap between the theoretical end time and the practical one
+		return_metrics (bool): Whether to return the metrics (default is False)
+
+	Returns:
+		if return_metrics:
+			metrics (dict): All the GMM metrics
+		else:
+			weight (float): Relative weight estimate
+
+	"""
 
 	# Reset the score
 	score_est.reset()

@@ -21,16 +21,25 @@ from slips.samplers.sto_loc import sto_loc_algorithm, sample_y_init
 from slips.samplers.alphas import *
 
 # Metrics
-from slips.distributions.phifour import log_Laplace
 from slips.metrics.wasserstein import compute_wasserstein, compute_sliced_wasserstein_fast
 from slips.metrics.ks import compute_sliced_ks
 from two_modes_utils import compute_relative_weights 
 
-# Get the score of the target distribution
 def log_prob_and_grad(target_log_prob, y):
-    y_ = torch.autograd.Variable(y, requires_grad=True)
-    log_prob_y = target_log_prob(y_)
-    return log_prob_y, torch.autograd.grad(log_prob_y.sum(), y_)[0].detach()
+	"""Compute the log-likelihood and score of a distribution
+
+	Args:
+		target_log_prob (function): Log-likelihood of the target distribution
+		y (torch.Tensor of shape (batch_size, *data_shape)): Evaluation point
+
+	Returns:
+		log_prob (torch.Tensor of shape (batch_size,)): Log-likelihood
+		grad (torch.Tensor of shape (batch_size, *data_shape)): Gradient of the log_likelihood
+	"""
+
+	y_ = torch.autograd.Variable(y, requires_grad=True)
+	log_prob_y = target_log_prob(y_)
+	return log_prob_y, torch.autograd.grad(log_prob_y.sum(), y_)[0].detach()
 
 # All the targets
 target_names = ['8gaussians', 'rings', 'funnel', 'two_modes_dim_8', 'two_modes_dim_16', 'two_modes_dim_32', 'two_modes_dim_64', 'two_modes_dim_128', 'ionosphere', 'sonar',
@@ -96,8 +105,30 @@ for target_name in ['sonar', 'ionosphere'] + list(filter(lambda x : 'two_modes' 
 	}
 
 
-# Run of of the algorithm
 def run_algorithm(algorithm_name, device, n_samples, target_log_prob_and_grad, target_log_prob, R, tau, dim, params, K, n_mcmc_steps):
+	"""Run a given algorithm given target and hyper-parameters
+
+	Args:
+		algorithm_name (str): Name of the algorithm (in 'smc','ais','mnm','rdmc','sto_loc_classic','sto_loc_geometric_1_1','sto_loc_geometric_2_1')
+		device (torch.Device): Device for computations
+		n_samples (int): Number of samples to draw
+		target_log_prob_and_grad (function): Log-likelihood and gradient of the target distribution
+		target_log_prob (function): Log-likelihood of the target distribution
+		R (float): Value of R
+		tau (float): Value of tau
+		dim (int): Dimensionality
+		params (dict): Hyper-parameters for the algorithm
+		K (int): Outer-loop computationnal budget
+		n_mcmc_steps (int): Number of MCMC steps (inner-loop)
+
+	Returns:
+		if algorithm_name == 'ais':
+			samples (torch.Tensor of shape (n_samples, *data_shape)): Approximate samples
+			weights (torch.Tensor of shape (n_samples,)): Weights
+		else:
+			samples (torch.Tensor of shape (n_samples, *data_shape)): Approximate samples
+	"""
+
 	# SMC
 	if algorithm_name == 'smc':
 		# Compute sigma
@@ -202,8 +233,21 @@ def run_algorithm(algorithm_name, device, n_samples, target_log_prob_and_grad, t
 		raise ValueError('Algorithm {} not implemented.'.format(algorithm_name))
 
 
-# Make the target distribution
 def make_target_dist(dist_name, device):
+	"""Make the target distribution
+
+	Args:
+		dist_name (str): Name of the target distribution (in '8gaussians','rings','funnel','two_modes_dim_*','ionosphere','sonar','phi_four_b_*_dim_*')
+		device (torch.Device): Device to use for the computations
+
+	Returns:
+		target_log_prob_and_grad (function): Log-likelihood and gradient of the target distribution
+		target_log_prob (function): Log-likelihood of the target distribution
+		R (float): Value of R
+		tau (float): Value of tau
+		dim (int): Dimensionality
+	"""
+
 	if dist_name == '8gaussians':
 		target = CircularMixture(device)
 		target_log_prob_and_grad = lambda x : log_prob_and_grad(target.log_prob, x)
@@ -254,8 +298,19 @@ def make_target_dist(dist_name, device):
 		raise ValueError('Target distribution {} not found.'.format(dist_name))
 	return target_log_prob_and_grad, target_log_prob, R, tau, dim
 
-# Compute metrics
 def compute_metrics(device, dist_name, samples, weights=None):
+	"""Compute the metrics given approximate samples under a target distribution
+
+	Args:
+		device (torch.Device): Device to use for computations
+		dist_name (str): Name of the target distribution
+		samples (torch.Tensor of shape (n_samples, *data_shape)): Approximate samples
+		weights (torch.Tensor of shape (n_samples,)): Weights (default is None)
+
+	Returns:
+		metrics (dict): Dictionnary filled with metrics
+	"""
+
 	if dist_name == '8gaussians':
 		target = CircularMixture(device)
 		ret = { 'w2' : float(compute_wasserstein(target.sample((samples.shape[0],)), samples, weights=weights)) }

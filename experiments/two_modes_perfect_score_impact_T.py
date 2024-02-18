@@ -8,8 +8,26 @@ from slips.samplers.sto_loc import sto_loc_algorithm
 from slips.samplers.alphas import *
 from two_modes_utils import make_target, compute_metrics_mog
 
-# Run the experiment
 def run_experiment(device, dim, T_range, K_range, target, target_samples, sigma, nabla_log_p_t, batch_size, epsilon, alpha, em_only):
+	"""Run the experiment
+
+	Args:
+		device (torch.Device): Device to use for the computations
+		dim (int): Dimension of the target
+		T (torch.Tensor): Range of end times
+		K_range (torch.Tensor): Range of computationnal budgets
+		target (slips.distributions.*): Target distribution
+		target_samples (torch.Tensor of shape (batch_size, *data_shape)): Exact samples from the target distribution
+		sigma (float): Value of sigma
+		nabla_log_p_t (function): Perfect score
+		batch_size (int): Number of samples to draw
+		epsilon (float): Starting time
+		alpha (Alpha): Alpha value
+		em_only (bool): Whether to force EM algorithm
+
+	Returns:
+		results (list of dict): List of metrics
+	"""
 
 	# Browse values of T and K
 	results = []
