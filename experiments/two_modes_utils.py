@@ -7,6 +7,7 @@ from slips.metrics.wasserstein import compute_wasserstein, compute_sliced_wasser
 from slips.distributions.mog import MoG
 from sklearn.mixture import GaussianMixture
 
+
 def make_target(device, dim, a=1.0, centered=True):
     """Make the target distribution
 
@@ -23,13 +24,14 @@ def make_target(device, dim, a=1.0, centered=True):
         a * torch.ones((dim,), device=device)
     ])
     if centered:
-        means += (a/3.) * torch.ones((dim,), device=device)
+        means += (a / 3.) * torch.ones((dim,), device=device)
     # Make the covariances
     covs = torch.stack([0.05 * torch.eye(dim, device=device)] * 2)
     # Make the weights
     weights = torch.FloatTensor([2, 1]).to(device)
     # Return the distribution
     return MoG(means, covs, weights)
+
 
 def compute_kl_gaussians(mean1, cov1, mean2, cov2):
     """Compute the Kullback-Leiber distance between two Gaussians
@@ -46,11 +48,12 @@ def compute_kl_gaussians(mean1, cov1, mean2, cov2):
 
     # Build the two distributions
     dist1 = torch.distributions.MultivariateNormal(loc=mean1, covariance_matrix=cov1,
-                                                  validate_args=False)
+                                                   validate_args=False)
     dist2 = torch.distributions.MultivariateNormal(loc=mean2, covariance_matrix=cov2,
-                                                  validate_args=False)
+                                                   validate_args=False)
     # Return the KL
     return float(torch.distributions.kl.kl_divergence(dist1, dist2).cpu())
+
 
 def compute_relative_weights(mean1, mean2, samples, weights=None, return_mask=False):
     """Compute the weight of the first mode in a two mode mixture using the closest assignment
@@ -80,6 +83,7 @@ def compute_relative_weights(mean1, mean2, samples, weights=None, return_mask=Fa
     else:
         return weight
 
+
 def compute_metrics_mog_gmm(means, covs, samples):
     """Compute of bunch of metrics (KL between the modes, mean MSE, cov MSE, mode weight) between a
     the real mixture and a GMM fitted approximaion
@@ -100,11 +104,11 @@ def compute_metrics_mog_gmm(means, covs, samples):
         # Fit the GMM
         try:
             gm = GaussianMixture(n_components=means.shape[0],
-                                 weights_init=np.array([2./3., 1./3.]),
+                                 weights_init=np.array([2. / 3., 1. / 3.]),
                                  means_init=means.cpu().numpy(),
                                  precisions_init=torch.linalg.inv(covs).cpu().numpy())
             gm = gm.fit(samples.cpu().numpy())
-        except:
+        except BaseException:
             return {}
         # Get the components
         mask, weight = compute_relative_weights(means[0], means[1], samples, return_mask=True)
@@ -114,17 +118,18 @@ def compute_metrics_mog_gmm(means, covs, samples):
         covs_est = torch.from_numpy(gm.covariances_).to(samples.device)
         try:
             ret['kl_mode1_gmm'] = compute_kl_gaussians(means[0], covs[0], means_est[0], covs_est[0])
-        except:
+        except BaseException:
             ret['kl_mode1_gmm'] = torch.nan
         try:
             ret['kl_mode2_gmm'] = compute_kl_gaussians(means[1], covs[1], means_est[1], covs_est[1])
-        except:
+        except BaseException:
             ret['kl_mode2_gmm'] = torch.nan
         ret['mean_err_mode1_gmm'] = float(torch.linalg.norm(means_est[0] - means[0]).cpu())
         ret['mean_err_mode2_gmm'] = float(torch.linalg.norm(means_est[1] - means[1]).cpu())
         ret['cov_err_mode1_gmm'] = float(torch.linalg.norm(covs[0] - covs_est[0], ord='fro').cpu())
         ret['cov_err_mode2_gmm'] = float(torch.linalg.norm(covs[1] - covs_est[1], ord='fro').cpu())
     return ret
+
 
 def compute_metrics_mog(means, covs, samples, target_samples=None, compute_regularized_w2=False):
     """Compute of bunch of metrics (KL between the modes, mean MSE, cov MSE, mode weight) between a
@@ -153,11 +158,11 @@ def compute_metrics_mog(means, covs, samples, target_samples=None, compute_regul
         cov1_est, cov2_est = samples[mask].T.cov(), samples[~mask].T.cov()
         try:
             ret['kl_mode1'] = compute_kl_gaussians(means[0], covs[0], mean1_est, cov1_est)
-        except:
+        except BaseException:
             ret['kl_mode1'] = torch.nan
         try:
             ret['kl_mode2'] = compute_kl_gaussians(means[1], covs[1], mean2_est, cov2_est)
-        except:
+        except BaseException:
             ret['kl_mode2'] = torch.nan
         ret['mean_err_mode1'] = float(torch.linalg.norm(mean1_est - means[0]).cpu())
         ret['mean_err_mode2'] = float(torch.linalg.norm(mean2_est - means[1]).cpu())
@@ -170,10 +175,11 @@ def compute_metrics_mog(means, covs, samples, target_samples=None, compute_regul
                 ret['w2'] = compute_wasserstein(target_samples, samples)
     return dict(ret, **compute_metrics_mog_gmm(means, covs, samples))
 
+
 def stack_metrics(l):
     """Stack a list of dict into a dict of lists"""
 
     metrics = list(l[0].keys())
     return {
-        metric : torch.FloatTensor(list(map(lambda x : x[metric], l))) for metric in metrics
+        metric: torch.FloatTensor(list(map(lambda x: x[metric], l))) for metric in metrics
     }

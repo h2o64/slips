@@ -5,26 +5,32 @@ import torch.nn.functional as F
 
 from torch.distributions.multivariate_normal import MultivariateNormal
 
+
 def Hessian(phi4, x):
     batch_size = x.shape[0]
     dim = x.shape[-1]
-    H = torch.eye(dim, device=x.device).unsqueeze(0).expand((batch_size, -1, -1)) * (3 * phi4.coef + 1 / phi4.coef * (3 * x.unsqueeze(-1)** 2 - 1))
-    triu_matrix = torch.triu(torch.triu(torch.ones((dim,dim), device=x.device), diagonal=-1).T, diagonal=-1).unsqueeze(0).expand((batch_size, -1, -1))
+    H = torch.eye(dim, device=x.device).unsqueeze(0).expand((batch_size, -1, -1)) * \
+        (3 * phi4.coef + 1 / phi4.coef * (3 * x.unsqueeze(-1) ** 2 - 1))
+    triu_matrix = torch.triu(torch.triu(torch.ones((dim, dim), device=x.device), diagonal=-1).T,
+                             diagonal=-1).unsqueeze(0).expand((batch_size, -1, -1))
     H -= phi4.coef * triu_matrix
     return H
 
-def U_Laplace(x,phi4):
+
+def U_Laplace(x, phi4):
     x_ = F.pad(input=x, pad=(1,) * (2 * 1), mode='constant', value=0)
-    grad_term = ((x_[:,1:] - x_[:,:-1]) ** 2 / 2).sum(-1)
-    V = ((1 - x ** 2) ** 2 / 4 + phi4.b * x).sum(-1) 
+    grad_term = ((x_[:, 1:] - x_[:, :-1]) ** 2 / 2).sum(-1)
+    V = ((1 - x ** 2) ** 2 / 4 + phi4.b * x).sum(-1)
     coef = phi4.a * phi4.dim_grid
     return grad_term * coef + V / coef
+
 
 def log_Laplace(x, phi4):
     log_Laplace = - phi4.beta * U_Laplace(x, phi4)
     log_Laplace_corr = phi4.dim_phys / 2 * math.log(2 * math.pi / phi4.beta)
     log_Laplace_corr -= torch.logdet(Hessian(phi4, x))
     return log_Laplace, log_Laplace + log_Laplace_corr
+
 
 class PhiFour(nn.Module):
     def __init__(self, a, b, dim_grid, dim_phys=1,
@@ -61,7 +67,7 @@ class PhiFour(nn.Module):
         else:
             x = n_or_values
         return x
-    
+
     def reshape_to_dimphys(self, x):
         if self.dim_phys == 2:
             x_ = x.reshape(-1, self.dim_grid, self.dim_grid)
@@ -73,8 +79,8 @@ class PhiFour(nn.Module):
         x = self.reshape_to_dimphys(x)
         coef = self.a * self.dim_grid
         V = ((1 - x ** 2) ** 2 / 4 + self.b * x).sum(self.sum_dims) / coef
-        if self.tilt is not None: 
-            tilt = (self.tilt['val'] - x.mean(self.sum_dims)) ** 2 
+        if self.tilt is not None:
+            tilt = (self.tilt['val'] - x.mean(self.sum_dims)) ** 2
             tilt = self.tilt["lambda"] * tilt / (4 * self.dim_grid)
             V += tilt
         return V
@@ -86,15 +92,15 @@ class PhiFour(nn.Module):
 
         if self.bc[0] == 'dirichlet':
             x_ = F.pad(input=x, pad=(1,) * (2 * self.dim_phys), mode='constant',
-                      value=self.bc[1])
+                       value=self.bc[1])
         elif self.bc[0] == 'pbc':
-            #adding "channel dimension" for circular torch padding 
-            x_ = x.unsqueeze(0) 
-            #only pad one side, not to double count gradients at the edges
-            x_ = F.pad(input=x_, pad=(1,0,) * (self.dim_phys), mode='circular')
-            x_.squeeze_(0) 
+            # adding "channel dimension" for circular torch padding
+            x_ = x.unsqueeze(0)
+            # only pad one side, not to double count gradients at the edges
+            x_ = F.pad(input=x_, pad=(1, 0,) * (self.dim_phys), mode='circular')
+            x_.squeeze_(0)
         else:
-            raise NotImplementedError("Only dirichlet and periodic BC"         
+            raise NotImplementedError("Only dirichlet and periodic BC"
                                       "implemeted for now")
 
         if self.dim_phys == 2:
@@ -103,9 +109,9 @@ class PhiFour(nn.Module):
             grad_term = (grad_x + grad_y).sum(self.sum_dims)
         else:
             grad_term = ((x_[:, 1:] - x_[:, :-1]) ** 2 / 2).sum(self.sum_dims)
-        
+
         coef = self.a * self.dim_grid
-        return grad_term * coef + self.V(x) 
+        return grad_term * coef + self.V(x)
 
     def grad_U(self, x_init):
         x = x_init.detach()

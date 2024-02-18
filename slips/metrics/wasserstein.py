@@ -6,6 +6,7 @@ import torch
 import ot as pot
 from functools import partial
 
+
 def compute_sliced_wasserstein_mc(samples1, samples2, n_random_projections=4096, centering=True):
     """Compute the sliced Wasserstein with multiple different random slices
 
@@ -65,6 +66,7 @@ def compute_sliced_wasserstein_fast(samples1, samples2, centering=True, weights=
         m2_Yc = torch.mean(torch.linalg.norm(samples2, dim=1) ** 2) / dim
     sw = torch.abs(torch.sqrt(m2_Xc) - torch.sqrt(m2_Yc))
     return sw
+
 
 def compute_wasserstein(samples0, samples1, method=None, reg=0.05, power=2, weights=None):
     """Compute the Wasserstein (1 or 2) distance (wrt Euclidean cost) between a source and a target

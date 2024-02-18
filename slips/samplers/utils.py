@@ -13,17 +13,21 @@ def heuristics_step_size(stepsize, mean_acceptance, target_acceptance=0.75, fact
         return stepsize / factor
     return min(stepsize, 1.0)
 
+
 def heuristics_step_size_vectorized(stepsize, mean_acceptance, target_acceptance=0.75, factor=1.03, tol=0.01):
     """Heuristic for adaptative step size in a vectorized fashion"""
     stepsize = torch.minimum(
-        torch.where((mean_acceptance - target_acceptance > tol).view((-1, *(1,) * (len(stepsize.shape)-1))), stepsize * factor, stepsize),
+        torch.where((mean_acceptance - target_acceptance > tol).view((-1, *(1,)
+                    * (len(stepsize.shape) - 1))), stepsize * factor, stepsize),
         torch.ones_like(stepsize)
     )
     stepsize = torch.minimum(
-        torch.where((target_acceptance - mean_acceptance > tol).view((-1, *(1,) * (len(stepsize.shape)-1))), stepsize / factor, stepsize),
+        torch.where((target_acceptance - mean_acceptance > tol).view((-1, *(1,)
+                    * (len(stepsize.shape) - 1))), stepsize / factor, stepsize),
         torch.ones_like(stepsize)
     )
     return stepsize
+
 
 def sample_multivariate_normal_diag(batch_size, mean, variance):
     """Sample according to multivariate normal with diagonal matrix"""

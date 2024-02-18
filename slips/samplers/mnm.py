@@ -65,6 +65,7 @@ def make_init(shape, sigma, device):
     x = 2. * x - 1.
     return x + torch.randn_like(x) * sigma
 
+
 def oat_sampler(
         y1,
         sigma,

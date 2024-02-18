@@ -6,6 +6,7 @@ import math
 from tqdm import trange
 from .mcmc import ula_mcmc, mala_mcmc
 
+
 def posterior_log_prob_and_grad(t, y, x, T, target_log_prob_and_grad):
     """Compute the posterior distribution of RDMC and its grading
 
@@ -27,12 +28,13 @@ def posterior_log_prob_and_grad(t, y, x, T, target_log_prob_and_grad):
     target_log_prob, target_grad = target_log_prob_and_grad(x)
     # Compute the log_prob
     log_prob = target_log_prob
-    log_prob -= 0.5 * torch.sum(torch.square(x - torch.exp(-(T-t))*y), dim=-1) / (1. - torch.exp(-2. * (T-t)))
+    log_prob -= 0.5 * torch.sum(torch.square(x - torch.exp(-(T - t)) * y), dim=-1) / (1. - torch.exp(-2. * (T - t)))
     # Compute the gradient
     grad = target_grad
     grad += torch.exp(-t) * (torch.exp(-t) * y - x) / (1. - torch.exp(-2. * t))
     # Return everything
     return log_prob, grad
+
 
 def posterior_importance_sampling(n_chains, t, x, T, target_log_prob, n_mc_samples=128):
     """Sample the importance distribution associated with the posterior of RDMC
@@ -50,7 +52,7 @@ def posterior_importance_sampling(n_chains, t, x, T, target_log_prob, n_mc_sampl
     """
 
     # Compute the variance and the mean
-    variance = (1. - torch.exp(-2.*(T-t))) / torch.exp(-2.*(T-t))
+    variance = (1. - torch.exp(-2. * (T - t))) / torch.exp(-2. * (T - t))
     mean = torch.exp((T - t)) * x
     # Generate particles
     z = torch.sqrt(variance) * torch.randn((n_mc_samples, *x.shape), device=x.device)
@@ -62,8 +64,9 @@ def posterior_importance_sampling(n_chains, t, x, T, target_log_prob, n_mc_sampl
     idx = torch.multinomial(weights.T, n_chains).T
     return torch.gather(z, 0, idx.unsqueeze(-1).expand((-1, -1, z.shape[-1]))).view((-1, z.shape[-1]))
 
+
 def score_estimation(t, x, T, target_log_prob, target_log_prob_and_grad, step_size, n_mc_samples,
-                          n_mcmc_steps, n_chains, warmup_fraction=0.5):
+                     n_mcmc_steps, n_chains, warmup_fraction=0.5):
     """Estimate the score of RDMC using IS followed by MCMC
 
     Args:
@@ -86,14 +89,16 @@ def score_estimation(t, x, T, target_log_prob, target_log_prob_and_grad, step_si
     y_langevin_start = posterior_importance_sampling(n_chains, t, x, T, target_log_prob, n_mc_samples)
     # Run Langevin on the posterior from the IS warm-start
     x_reshaped = x.unsqueeze(0).repeat((n_chains, 1, 1)).view((-1, x.shape[-1]))
-    current_posterior_log_prob_and_grad = lambda y : posterior_log_prob_and_grad(t, y, x_reshaped,
-        T, target_log_prob_and_grad)
+
+    def current_posterior_log_prob_and_grad(y): return posterior_log_prob_and_grad(t, y, x_reshaped,
+                                                                                   T, target_log_prob_and_grad)
     ys_langevin, step_size = mala_mcmc(y_langevin_start, step_size, current_posterior_log_prob_and_grad,
-                            n_mcmc_steps, per_chain_step_size=True, return_intermediates=True)
+                                       n_mcmc_steps, per_chain_step_size=True, return_intermediates=True)
     ys_langevin = ys_langevin[-int(warmup_fraction * n_mcmc_steps):]
     ys_langevin = ys_langevin.view((int(warmup_fraction * n_mcmc_steps) * n_chains, -1, x.shape[-1]))
     # Compute the approximate score
-    return -(x - torch.exp(-(T-t)) * ys_langevin.mean(dim=0)) / (1. - torch.exp(-2.0 * (T - t))), step_size
+    return -(x - torch.exp(-(T - t)) * ys_langevin.mean(dim=0)) / (1. - torch.exp(-2.0 * (T - t))), step_size
+
 
 def rdmc_algorithm(x_init, target_log_prob, target_log_prob_and_grad, T, K, n_warm_start_steps=50, n_chains=10,
                    n_mcmc_steps=10, n_mc_samples=128, verbose=False):
@@ -121,22 +126,23 @@ def rdmc_algorithm(x_init, target_log_prob, target_log_prob_and_grad, T, K, n_wa
     # The initial distribution can be approximated by a centered Gaussian with covariance (1. - math.exp(-2. * T)) I
     step_size = torch.tensor(1. - math.exp(-2. * T)) / 2.
     # Run a Langevin sampler to better approximate the initial distributions
-    init_score = lambda x : score_estimation(torch.tensor(0.0), x, T, target_log_prob, target_log_prob_and_grad,
-        step_size, n_mc_samples, n_mcmc_steps, n_chains)[0]
+
+    def init_score(x): return score_estimation(torch.tensor(0.0), x, T, target_log_prob, target_log_prob_and_grad,
+                                               step_size, n_mc_samples, n_mcmc_steps, n_chains)[0]
     x = ula_mcmc(x.clone(), step_size, init_score, n_warm_start_steps)
     # Loop over the times
     ts = torch.linspace(0.0, T, K)
     if verbose:
-        r = trange(K-1)
+        r = trange(K - 1)
     else:
-        r = range(K-1)
+        r = range(K - 1)
     for i in r:
         # Get the current time
         t = ts[i]
-        delta = ts[i+1] - ts[i]
+        delta = ts[i + 1] - ts[i]
         # Compute the score
         score, step_size = score_estimation(t, x, T, target_log_prob, target_log_prob_and_grad, step_size, n_mc_samples,
-                                                 n_mcmc_steps, n_chains)
+                                            n_mcmc_steps, n_chains)
         # Update x using the estimated score
         x = torch.exp(delta) * x + (torch.exp(delta) - 1.) * score
         x += torch.sqrt(torch.exp(2. * delta) - 1.) * torch.randn_like(x)

@@ -56,7 +56,7 @@ def mala_mcmc(
         step_size,
         log_prob_and_grad,
         n_steps,
-        per_chain_step_size=True, 
+        per_chain_step_size=True,
         return_intermediates=False,
         return_intermediates_gradients=False,
         target_acceptance=0.75):
@@ -88,7 +88,7 @@ def mala_mcmc(
             grad_xs = torch.empty_like(xs)
     # Reshape the step size if it hasn't been done yet
     if per_chain_step_size and not (isinstance(step_size, torch.Tensor) and len(step_size.shape) > 0):
-        step_size = step_size * torch.ones((x.shape[0], *(1,) * (len(x.shape)-1)), device=x.device)
+        step_size = step_size * torch.ones((x.shape[0], *(1,) * (len(x.shape) - 1)), device=x.device)
     for i in range(n_steps):
         # Sample the proposal
         x_prop = sample_multivariate_normal_diag(
@@ -101,7 +101,11 @@ def mala_mcmc(
         # Compute the MH ratio
         with torch.no_grad():
             joint_prop = log_prob_x_prop - \
-                log_prob_multivariate_normal_diag(x_prop, mean=x + step_size * grad_x, variance=2.0 * step_size, sum_indexes=sum_indexes)
+                log_prob_multivariate_normal_diag(
+                    x_prop,
+                    mean=x + step_size * grad_x,
+                    variance=2.0 * step_size,
+                    sum_indexes=sum_indexes)
             joint_orig = log_prob_x - log_prob_multivariate_normal_diag(x,
                                                                         mean=x_prop + step_size * grad_x_prop,
                                                                         variance=2.0 * step_size,
@@ -115,10 +119,10 @@ def mala_mcmc(
         # Update the step size
         if per_chain_step_size:
             step_size = heuristics_step_size_vectorized(step_size,
-                torch.minimum(torch.ones_like(log_acc), torch.exp(log_acc)), target_acceptance=target_acceptance)
+                                                        torch.minimum(torch.ones_like(log_acc), torch.exp(log_acc)), target_acceptance=target_acceptance)
         else:
             step_size = heuristics_step_size(step_size,
-                torch.minimum(torch.ones_like(log_acc), torch.exp(log_acc)).mean(), target_acceptance=target_acceptance)
+                                             torch.minimum(torch.ones_like(log_acc), torch.exp(log_acc)).mean(), target_acceptance=target_acceptance)
         # Save the sample
         if return_intermediates:
             xs[i] = x.clone()
@@ -282,7 +286,8 @@ class MCMCScoreEstimator:
 
         if self.log_prob_and_grad:
             log_prob_pi, grad_pi = self.log_prob_and_grad(x)
-            log_prob = log_prob_pi - 0.5 * torch.sum(torch.square(alpha.alpha(t) * x - y), dim=-1) / (torch.square(sigma) * t)
+            log_prob = log_prob_pi - 0.5 * \
+                torch.sum(torch.square(alpha.alpha(t) * x - y), dim=-1) / (torch.square(sigma) * t)
             grad = grad_pi + (alpha.g(t) / torch.square(sigma)) * ((y / math.sqrt(t)) - alpha.g(t) * x)
             return log_prob, grad
         else:
@@ -354,7 +359,7 @@ class MCMCScoreEstimator:
         # Reshape y if needed
         if self.n_mcmc_chains > 1:
             orig_shape = y.shape
-            y = y.unsqueeze(0).repeat((self.n_mcmc_chains, 1, *(1,) * (len(y.shape)-1))).view((-1, *y.shape[1:]))
+            y = y.unsqueeze(0).repeat((self.n_mcmc_chains, 1, *(1,) * (len(y.shape) - 1))).view((-1, *y.shape[1:]))
         # Initial sample
         if self.use_last_mcmc_iterate and not self.last_mcmc_iterate is None:
             # Use the last MCMC step of the previous call
@@ -366,10 +371,11 @@ class MCMCScoreEstimator:
             else:
                 x0 = y / alpha.alpha(t)
         # Initialize the very first step size of MALA
-        if self.log_prob_and_grad is not None and (type(self.step_size) == type(self.default_step_size)) and (self.step_size == self.default_step_size):
+        if self.log_prob_and_grad is not None and (isinstance(self.step_size, type(
+                self.default_step_size))) and (self.step_size == self.default_step_size):
             # Run for a long time
             x0 = self.sample(x0, self.step_size, lambda x: self.cond_score(x, y, t, sigma, alpha),
-                manual_n_steps=50*self.n_mcmc_samples)[-1].clone()
+                             manual_n_steps=50 * self.n_mcmc_samples)[-1].clone()
         # Sample with MCMC starting
         xs = self.sample(x0, self.step_size, lambda x: self.cond_score(x, y, t, sigma, alpha))
         xs = xs[-self.keep_mcmc_length:]

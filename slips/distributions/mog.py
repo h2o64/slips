@@ -91,7 +91,6 @@ class MoG:
         # Compute the log_prob
         return log_prob_mog(y, alpha.alpha(t) * self.means, covs, self.weights)
 
-
     def mnm_sigma(self):
         """Compute the value of sigma based on Eq (4.3) of "Chain of Log-Concave Markov Chains" (arXiv:2305.19473)
 
@@ -102,6 +101,7 @@ class MoG:
         R = float(torch.cdist(self.means.unsqueeze(0), self.means.unsqueeze(0)).max())
         tau = float(torch.sqrt(self.covs.max()))
         return math.sqrt(max(0.0, R**2 - tau**2))
+
 
 class CircularMixture(MoG):
     """Classic mixture of 8 Gaussians in a circle"""

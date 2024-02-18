@@ -7,10 +7,17 @@ import math
 from .mcmc import ula_mcmc, mala_mcmc
 
 # Make the initial distribution details for the Gaussian case
-init_sample_gaussian = lambda n_samples, sigma, dim, device : sigma * torch.randn((n_samples, dim), device=device)
-init_log_prob_and_grad_gaussian = lambda x, sigma : (-0.5 * (torch.sum(torch.square(x), dim=-1) / torch.square(sigma)) - 0.5 * math.log(2. * math.pi) / x.shape[-1], -x)
+
+
+def init_sample_gaussian(n_samples, sigma, dim, device): return sigma * torch.randn((n_samples, dim), device=device)
+
+
+def init_log_prob_and_grad_gaussian(x, sigma): return (-0.5 * (torch.sum(torch.square(x),
+                                                                         dim=-1) / torch.square(sigma)) - 0.5 * math.log(2. * math.pi) / x.shape[-1], -x)
 
 # Sequential Monte Carlo algorithm
+
+
 def smc_algorithm(n_particles, target_log_prob, target_log_prob_and_grad, betas, n_mcmc_steps, init_sample, init_log_prob_and_grad,
                   langevin_type='mala', init_step_size=1e-2, skip_ressampling=False, use_ais=False, verbose=False):
     """Sequential Monte Carlo algorithm
@@ -31,7 +38,7 @@ def smc_algorithm(n_particles, target_log_prob, target_log_prob_and_grad, betas,
     Returns:
         samples (torch.Tensor of shape (n_particles, *data_shape)): Approximate samples according to the target distribution
     """
-    
+
     # Define intermediate distributions
     def log_prob_and_grad_k(k, x):
         # Evaluate the initial distribution
@@ -42,6 +49,7 @@ def smc_algorithm(n_particles, target_log_prob, target_log_prob_and_grad, betas,
         log_prob = (1. - betas[k]) * init_log_prob_ + betas[k] * target_log_prob_
         grad = (1. - betas[k]) * init_grad + betas[k] * target_grad
         return log_prob, grad
+
     def log_prob_k(k, x):
         # Evaluate the initial distribution
         init_log_prob_ = init_log_prob_and_grad(x)[0]
@@ -50,7 +58,8 @@ def smc_algorithm(n_particles, target_log_prob, target_log_prob_and_grad, betas,
         # Compute the log_prob
         log_prob = (1. - betas[k]) * init_log_prob_ + betas[k] * target_log_prob_
         return log_prob
-    score_k = lambda k, x : log_prob_and_grad_k(k, x)[1]
+
+    def score_k(k, x): return log_prob_and_grad_k(k, x)[1]
     # Sample the initial distirbution
     x = init_sample(n_particles)
     # Make the initial step size
@@ -64,7 +73,7 @@ def smc_algorithm(n_particles, target_log_prob, target_log_prob_and_grad, betas,
         log_weights_ais = torch.zeros((n_particles,), device=x.device)
     for k in r:
         # Compute the weights
-        log_weights = log_prob_k(k, x) - log_prob_k(k-1, x)
+        log_weights = log_prob_k(k, x) - log_prob_k(k - 1, x)
         if use_ais:
             log_weights_ais += log_weights
         weights = torch.nn.functional.softmax(log_weights, dim=0)
@@ -74,12 +83,13 @@ def smc_algorithm(n_particles, target_log_prob, target_log_prob_and_grad, betas,
             idx = torch.multinomial(weights, n_particles, replacement=True)
             x = x[idx]
         # Run the MCMC
-        cur_score = lambda x : score_k(k, x)
-        cur_log_prob_and_grad = lambda x : log_prob_and_grad_k(k, x)
+        def cur_score(x): return score_k(k, x)
+        def cur_log_prob_and_grad(x): return log_prob_and_grad_k(k, x)
         if langevin_type == 'ula':
             x = ula_mcmc(x.clone(), step_size, cur_score, n_mcmc_steps)
         else:
-            x, step_size = mala_mcmc(x.clone(), step_size, cur_log_prob_and_grad, n_mcmc_steps, per_chain_step_size=True)
+            x, step_size = mala_mcmc(x.clone(), step_size, cur_log_prob_and_grad,
+                                     n_mcmc_steps, per_chain_step_size=True)
     if use_ais:
         return x, torch.nn.functional.softmax(log_weights_ais, dim=0)
     else:

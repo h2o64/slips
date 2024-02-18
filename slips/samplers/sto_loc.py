@@ -8,8 +8,9 @@ from .integrators import *
 from .alphas import *
 from .mcmc import ula_mcmc
 
+
 def get_nabla_log_pt_from_mc_est(score_est, score_type, y, t, sigma, alpha):
-    """Get \nabla \log p_t from any type of score estimator
+    """Get \nabla \\log p_t from any type of score estimator
 
     Args:
         score_est (function): Estimator of the score
@@ -36,10 +37,11 @@ def get_nabla_log_pt_from_mc_est(score_est, score_type, y, t, sigma, alpha):
     else:
         raise NotImplementedError('Score type {} not implemented.'.format(score_type))
 
+
 def sto_loc_algorithm(alpha, y_init, K, T, sigma, score_est, score_type='nabla_log_p_t',
-    epsilon=1e-5, epsilon_end=0.0, use_exponential_integrator=True,
-    use_logarithmic_discretization=False, use_snr_discretization=True,
-    verbose=False, callbacks=None):
+                      epsilon=1e-5, epsilon_end=0.0, use_exponential_integrator=True,
+                      use_logarithmic_discretization=False, use_snr_discretization=True,
+                      verbose=False, callbacks=None):
     """Generalized stochastic localization algorithm
 
     Args:
@@ -71,16 +73,16 @@ def sto_loc_algorithm(alpha, y_init, K, T, sigma, score_est, score_type='nabla_l
         epsilon_end = 0.0
     # Compute time discretization
     if use_snr_discretization:
-        log_g_sq = lambda t : 2. * math.log(alpha.g(t))
-        log_g_sq_inv = lambda t : alpha.g_inv(math.exp(t / 2.))
+        def log_g_sq(t): return 2. * math.log(alpha.g(t))
+        def log_g_sq_inv(t): return alpha.g_inv(math.exp(t / 2.))
         ts = make_time_discretization_from_snr(log_g_sq=log_g_sq, log_g_sq_inv=log_g_sq_inv, T=T, K=K,
-            eps_start=epsilon, eps_end=epsilon_end).to(y.device)
+                                               eps_start=epsilon, eps_end=epsilon_end).to(y.device)
     else:
         split_in_middle = alpha.is_finite_time
         log_start = use_logarithmic_discretization
         log_end = use_logarithmic_discretization and alpha.is_finite_time
         ts = make_time_discretization(T=T, K=K, eps_start=epsilon, eps_end=epsilon_end,
-            split_in_middle=split_in_middle, log_start=log_start, log_end=log_end).to(y.device)
+                                      split_in_middle=split_in_middle, log_start=log_start, log_end=log_end).to(y.device)
     # Select the SDE solver
     if score_type == 'nabla_log_p_t':
         sde_solver_step = integration_step_nabla_log_p_t
@@ -95,25 +97,38 @@ def sto_loc_algorithm(alpha, y_init, K, T, sigma, score_est, score_type='nabla_l
     else:
         raise NotImplementedError('Score type {} not supported.'.format(score_type))
     # Deduce the score from the MC estimator
-    nabla_log_p_t = lambda y, t, sigma, alpha : get_nabla_log_pt_from_mc_est(score_est, score_type, y, t, sigma, alpha)
+
+    def nabla_log_p_t(
+        y,
+        t,
+        sigma,
+        alpha): return get_nabla_log_pt_from_mc_est(
+        score_est,
+        score_type,
+        y,
+        t,
+        sigma,
+        alpha)
     # Solve the SDE with Euler
     if verbose:
-        r = trange(0, K-1)
+        r = trange(0, K - 1)
     else:
-        r = range(0, K-1)
+        r = range(0, K - 1)
     for k in r:
         # Run a step of SDE solver
-        y = sde_solver_step(y, score_est, ts[k+1], ts[k], sigma, alpha, use_exponential_integrator)
+        y = sde_solver_step(y, score_est, ts[k + 1], ts[k], sigma, alpha, use_exponential_integrator)
         # Execute callbacks
         if callbacks is not None:
             for callback in callbacks:
-                callback(y, ts[k+1])
+                callback(y, ts[k + 1])
     # Denoise y_T
     ret = y
     ret += torch.square(sigma) * ts[-1] * nabla_log_p_t(y, ts[-1], sigma, alpha)
     return ret / alpha.alpha(ts[-1])
 
-def sample_y_init(shape, sigma, epsilon, alpha, device, langevin_init=False, n_langevin_steps=10, score_est=None, score_type=None, target_mean=None):
+
+def sample_y_init(shape, sigma, epsilon, alpha, device, langevin_init=False,
+                  n_langevin_steps=10, score_est=None, score_type=None, target_mean=None):
     """Sample the generalized stochastic localization algorithm
 
     Args:
@@ -142,7 +157,7 @@ def sample_y_init(shape, sigma, epsilon, alpha, device, langevin_init=False, n_l
     # Refine with Langevin or not
     if langevin_init:
         # Get the score at time epsilon
-        score = lambda x : get_nabla_log_pt_from_mc_est(score_est, score_type, x, epsilon, sigma, alpha)
+        def score(x): return get_nabla_log_pt_from_mc_est(score_est, score_type, x, epsilon, sigma, alpha)
         # Set the step size (the step size is 1/L where L is the lipschitz constant of the score)
         step_size = torch.square(sigma) * epsilon / 2.
         # Run ULA chain
