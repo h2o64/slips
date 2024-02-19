@@ -19,10 +19,10 @@ We consider a general stochastic localization framework and introduce an explici
 - Phi four field system (with 100 dimensions)
 
 This code also contains implementation of the following papers :
-- [Reverse Diffusion Monte Carlo](https://openreview.net/forum?id=kIPEyMSdFV)
-- [Chain of Log-Concave Markov Chains](https://openreview.net/forum?id=yiMB2DOjsR)
-- [Annealed Importance Sampling](https://link.springer.com/article/10.1023/A:1008923215028)
-- [Sequential Monte Carlo](https://www.jstor.org/stable/3879283)
+- [Reverse Diffusion Monte Carlo](https://openreview.net/forum?id=kIPEyMSdFV) (see [`slips.samplers.rdmc`](./slips/samplers/rdmc.py))
+- [Chain of Log-Concave Markov Chains](https://openreview.net/forum?id=yiMB2DOjsR) (see [`slips.samplers.mnm`](./slips/samplers/mnm.py))
+- [Annealed Importance Sampling](https://link.springer.com/article/10.1023/A:1008923215028) (see [`slips.samplers.smc`](./slips/samplers/smc.py))
+- [Sequential Monte Carlo](https://www.jstor.org/stable/3879283) (see [`slips.samplers.smc`](./slips/samplers/smc.py))
 
 ## Installation
 
