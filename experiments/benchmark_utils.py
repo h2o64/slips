@@ -15,6 +15,7 @@ from two_modes_utils import make_target
 from slips.samplers.smc import smc_algorithm, init_sample_gaussian, init_log_prob_and_grad_gaussian
 from slips.samplers.mc import score_mc_est
 from slips.samplers.mcmc import MCMCScoreEstimator
+from slips.samplers.mcmc import hmc_mcmc, nuts_mcmc, mala_mcmc, ess_mcmc
 from slips.samplers.rdmc import rdmc_algorithm
 from slips.samplers.mnm import make_init, oat_sampler
 from slips.samplers.sto_loc import sto_loc_algorithm, sample_y_init
@@ -298,7 +299,7 @@ def make_target_dist(dist_name, device):
         b = float(dist_name.split('_')[3])
         dim = int(dist_name.split('_')[-1])
         target = PhiFour(a=0.1, b=b, dim_grid=dim, dim_phys=1, beta=20.)
-        def target_log_prob(x): return -target.beta * target.U(x)
+        target_log_prob = target.log_prob
         def target_log_prob_and_grad(x): return log_prob_and_grad(target_log_prob, x)
         R = 0.85
         tau = 0.15
@@ -358,33 +359,12 @@ def compute_metrics(device, dist_name, samples, skip_high_cost_metrics=False, we
         b = float(dist_name.split('_')[3])
         dim = int(dist_name.split('_')[-1])
         target = PhiFour(a=0.1, b=b, dim_grid=dim, dim_phys=1, beta=20.)
+        true_weight, true_weight_cor = target.compute_stats_integration()
         # Compute the weight ratio
-        mask = (samples[:, int(dim / 2)] > 0).cpu()
-        if weights is None:
-            weight_ratio = float(mask.float().mean() / (1. - mask.float().mean()))
-        else:
-            if mask.sum() == 0:
-                weight_ratio = 1e-10
-            else:
-                weight_ratio = float(weights[mask].sum() / weights[~mask].sum())
-        en_diff = -math.log(max(weight_ratio, 1e-20))
-        # Compute the target weight ratio
-        if b == 0.00e+00:
-            target_en_diff = torch.tensor(0.00000000e+00)
-        elif b == 2.50e-02:
-            target_en_diff = torch.tensor(-7.50320435e+00)
-        elif b == 5.00e-02:
-            target_en_diff = torch.tensor(-1.49925537e+01)
-        elif b == 7.50e-02:
-            target_en_diff = torch.tensor(-2.24531708e+01)
-        elif b == 1.00e-01:
-            target_en_diff = torch.tensor(-2.98685608e+01)
-        target_weight_ratio = float(torch.exp(-target_en_diff))
         return {
-            'abs_err_weight_ratio': float(abs(target_weight_ratio - weight_ratio)),
-            'relative_err_diff_est': float((en_diff - target_en_diff) / target_en_diff),
-            'en_diff': en_diff,
-            'weight_ratio': weight_ratio
+            'weight_ratio': target.compute_phi_four_weight(samples),
+            'weight_ratio_true': true_weight,
+            'weight_ratio_true_cor': true_weight_cor
         }
     else:
         raise ValueError('Target distribution {} not found.'.format(dist_name))

@@ -1,43 +1,21 @@
 import math
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
-from torch.distributions.multivariate_normal import MultivariateNormal
+
+def run_gdflow(U, grad_U, x_, n_steps, dt, verbose_freq=100):
+    x = x_.clone()
+    r = range(n_steps)
+    for t in r:
+        x -= dt * grad_U(x)
+    return x.detach()
 
 
-def Hessian(phi4, x):
-    batch_size = x.shape[0]
-    dim = x.shape[-1]
-    H = torch.eye(dim, device=x.device).unsqueeze(0).expand((batch_size, -1, -1)) * \
-        (3 * phi4.coef + 1 / phi4.coef * (3 * x.unsqueeze(-1) ** 2 - 1))
-    triu_matrix = torch.triu(torch.triu(torch.ones((dim, dim), device=x.device), diagonal=-1).T,
-                             diagonal=-1).unsqueeze(0).expand((batch_size, -1, -1))
-    H -= phi4.coef * triu_matrix
-    return H
-
-
-def U_Laplace(x, phi4):
-    x_ = F.pad(input=x, pad=(1,) * (2 * 1), mode='constant', value=0)
-    grad_term = ((x_[:, 1:] - x_[:, :-1]) ** 2 / 2).sum(-1)
-    V = ((1 - x ** 2) ** 2 / 4 + phi4.b * x).sum(-1)
-    coef = phi4.a * phi4.dim_grid
-    return grad_term * coef + V / coef
-
-
-def log_Laplace(x, phi4):
-    log_Laplace = - phi4.beta * U_Laplace(x, phi4)
-    log_Laplace_corr = phi4.dim_phys / 2 * math.log(2 * math.pi / phi4.beta)
-    log_Laplace_corr -= torch.logdet(Hessian(phi4, x))
-    return log_Laplace, log_Laplace + log_Laplace_corr
-
-
-class PhiFour(nn.Module):
+class PhiFour(torch.nn.Module):
     def __init__(self, a, b, dim_grid, dim_phys=1,
                  beta=1,
                  bc=('dirichlet', 0),
-                 tilt=None,
-                 device='cpu'):
+                 tilt=None):
         """
         Class to handle operations around PhiFour model
         Args:
@@ -48,25 +26,16 @@ class PhiFour(nn.Module):
             beta: inverse temperature
             tilt: None or {"val":0.7, "lambda":0.1} - for biasing distribution
         """
-        self.device = device
-
         self.a = a
         self.b = b
         self.beta = beta
         self.dim_grid = dim_grid
         self.dim_phys = dim_phys
         self.sum_dims = tuple(i + 1 for i in range(dim_phys))
-
         self.bc = bc
         self.tilt = tilt
-
-    def init_field(self, n_or_values):
-        if isinstance(n_or_values, int):
-            x = torch.rand((n_or_values,) + (self.dim_grid,) * self.dim_phys)
-            x = x * 2 - 1
-        else:
-            x = n_or_values
-        return x
+        self.coef = self.a * self.dim_grid
+        super().__init__()
 
     def reshape_to_dimphys(self, x):
         if self.dim_phys == 2:
@@ -77,8 +46,7 @@ class PhiFour(nn.Module):
 
     def V(self, x):
         x = self.reshape_to_dimphys(x)
-        coef = self.a * self.dim_grid
-        V = ((1 - x ** 2) ** 2 / 4 + self.b * x).sum(self.sum_dims) / coef
+        V = ((1 - x ** 2) ** 2 / 4 + self.b * x).sum(self.sum_dims) / self.coef
         if self.tilt is not None:
             tilt = (self.tilt['val'] - x.mean(self.sum_dims)) ** 2
             tilt = self.tilt["lambda"] * tilt / (4 * self.dim_grid)
@@ -110,14 +78,53 @@ class PhiFour(nn.Module):
         else:
             grad_term = ((x_[:, 1:] - x_[:, :-1]) ** 2 / 2).sum(self.sum_dims)
 
-        coef = self.a * self.dim_grid
-        return grad_term * coef + self.V(x)
+        return grad_term * self.coef + self.V(x)
 
-    def grad_U(self, x_init):
-        x = x_init.detach()
-        x = x.requires_grad_()
-        optimizer = torch.optim.SGD([x], lr=0)
-        optimizer.zero_grad()
-        loss = self.U(x).sum()
-        loss.backward()
-        return x.grad.data
+    def log_prob(self, x):
+        return -self.beta * self.U(x)
+
+    def grad_U(self, x):
+        assert self.bc == ('dirichlet', 0)
+        assert self.dim_phys != 2
+        assert self.tilt is None
+        x = self.reshape_to_dimphys(x)
+        ret = (self.b - x * (1. - torch.square(x))) / self.coef
+        ret[:, 1:-1] += self.coef * (2. * x[:, 1:-1] - x[:, 2:] - x[:, :-2])
+        ret[:, 0] += self.coef * (2. * x[:, 0] - x[:, 1])
+        ret[:, -1] += self.coef * (2. * x[:, -1] - x[:, -2])
+        return ret
+
+    def Hessian(self, x):
+        dim = x.shape[-1]
+        H = torch.eye(dim, device=x.device) * (3 * self.coef + 1 / self.coef * (3 * x ** 2 - 1))
+        H -= self.coef * torch.triu(torch.triu(torch.ones_like(H),
+                                               diagonal=-1).T, diagonal=-1)
+        return H
+
+    def log_Laplace(self, x):
+        log_Laplace = -self.beta * self.U(x.unsqueeze(0)).squeeze(0)
+        log_Laplace_corr = (self.dim_grid / 2) * math.log(2 * math.pi / self.beta)
+        log_Laplace_corr -= 0.5 * torch.logdet(self.Hessian(x))
+        return log_Laplace, log_Laplace + log_Laplace_corr
+
+    def compute_stats_integration(self):
+        # Compute the minimum
+        x_init = torch.ones((2, self.dim_grid))
+        x_init[1, :] *= -1
+        self.x_min = run_gdflow(self.U, self.grad_U, x_init, n_steps=10000, dt=5e-3)
+        # Compute the energy difference
+        log_Laplace_pos, log_Laplace_cor_pos = self.log_Laplace(self.x_min[0])
+        log_Laplace_neg, log_Laplace_cor_neg = self.log_Laplace(self.x_min[1])
+        en_diff, en_diff_cor = log_Laplace_neg - log_Laplace_pos, log_Laplace_cor_neg - log_Laplace_cor_pos
+        # Compute the weights
+        return torch.exp(en_diff).item(), torch.exp(en_diff_cor).item()
+
+    def compute_phi_four_weight(self, samples):
+        mask = (samples[:, int(self.dim_grid / 2)] > 0)
+        return ((1. - mask.float().mean()) / mask.float().mean())
+
+    def _apply(self, fn):
+        new_self = super(PhiFour, self)._apply(fn)
+        if hasattr(new_self, 'x_min'):
+            new_self.x_min = fn(new_self.x_min)
+        return new_self
