@@ -128,7 +128,7 @@ def sto_loc_algorithm(alpha, y_init, K, T, sigma, score_est, score_type='nabla_l
 
 
 def sample_y_init(shape, sigma, epsilon, alpha, device, langevin_init=False, n_langevin_steps=10,
-        score_est=None, score_type=None, target_mean=None, n_gd_steps=0, gd_step_size_factor=1.0):
+                  score_est=None, score_type=None, target_mean=None, n_gd_steps=0, gd_step_size_factor=1.0):
     """Sample the generalized stochastic localization algorithm
 
     Args:
@@ -155,7 +155,7 @@ def sample_y_init(shape, sigma, epsilon, alpha, device, langevin_init=False, n_l
     else:
         target_mean_ = torch.zeros(shape[1:], device=device)
     # Get the score at time epsilon
-    score = lambda x : get_nabla_log_pt_from_mc_est(score_est, score_type, x, epsilon, sigma, alpha)
+    def score(x): return get_nabla_log_pt_from_mc_est(score_est, score_type, x, epsilon, sigma, alpha)
     # Set the step size (the step size is 1/L where L is the lipschitz constant of the score)
     step_size = torch.square(sigma) * epsilon / 2.
     # Set y

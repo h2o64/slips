@@ -12,7 +12,7 @@ from .utils import (
 
 
 def ula_mcmc(x0, step_size, score, n_steps, n_warmup_steps=0, return_intermediates=False,
-    return_intermediates_gradients=False):
+             return_intermediates_gradients=False):
     """Perform multiple steps of the ULA algorithm
 
         X_{k+1} = X_k + steps_size * score(X_k) + sqrt(2 * step_size) * Z_k
@@ -338,7 +338,7 @@ class MCMCScoreEstimator:
                 self.step_size,
                 target_fn,
                 n_steps=self.keep_mcmc_length if manual_n_steps is None else 1,
-                n_warmup_steps=self.n_mcmc_samples - self.keep_mcmc_length if manual_n_steps is None else manual_n_steps-1, 
+                n_warmup_steps=self.n_mcmc_samples - self.keep_mcmc_length if manual_n_steps is None else manual_n_steps-1,
                 return_intermediates=True,
                 target_acceptance=self.target_acceptance
             )
