@@ -11,7 +11,8 @@ from .utils import (
 )
 
 
-def ula_mcmc(x0, step_size, score, n_steps, return_intermediates=False, return_intermediates_gradients=False):
+def ula_mcmc(x0, step_size, score, n_steps, n_warmup_steps=0, return_intermediates=False,
+    return_intermediates_gradients=False):
     """Perform multiple steps of the ULA algorithm
 
         X_{k+1} = X_k + steps_size * score(X_k) + sqrt(2 * step_size) * Z_k
@@ -21,6 +22,7 @@ def ula_mcmc(x0, step_size, score, n_steps, return_intermediates=False, return_i
         step_size (float): Step size for Langevin
         score (function): Gradient of the log-likelihood of the target distribution
         n_steps (int): Number of steps of the algorithm
+        n_warmup_steps (int): Number of warmup steps (default is 0)
         return_intermediates (bool): Whether to return intermediates states
         return_intermediates_gradients (bool): Whether to return intermediates gradients
             (only is return_intermediates is True)
@@ -34,13 +36,13 @@ def ula_mcmc(x0, step_size, score, n_steps, return_intermediates=False, return_i
         xs = torch.empty((n_steps, *x.shape), device=x.device)
         if return_intermediates_gradients:
             grad_xs = torch.empty_like(xs)
-    for i in range(n_steps):
+    for i in range(n_warmup_steps+n_steps):
         grad_x = score(x)
         x += step_size * grad_x + torch.sqrt(2. * step_size) * torch.randn_like(x)
-        if return_intermediates:
-            xs[i] = x.clone()
+        if return_intermediates and (i >= n_warmup_steps):
+            xs[i - n_warmup_steps] = x.clone()
             if return_intermediates_gradients and i >= 1:
-                grad_xs[i - 1] = grad_x.clone()
+                grad_xs[i - 1 - n_warmup_steps] = grad_x.clone()
     if return_intermediates:
         if return_intermediates_gradients:
             grad_xs[-1] = score(x).clone()
@@ -56,6 +58,7 @@ def mala_mcmc(
         step_size,
         log_prob_and_grad,
         n_steps,
+        n_warmup_steps=0,
         per_chain_step_size=True,
         return_intermediates=False,
         return_intermediates_gradients=False,
@@ -69,6 +72,7 @@ def mala_mcmc(
         step_size (float): Step size for Langevin
         score (function): Gradient of the log-likelihood of the target distribution
         n_steps (int): Number of steps of the algorithm
+        n_warmup_steps (int): Number of warmup steps (default is 0)
         per_chain_step_size (bool): Use a per chain step size (default is True)
         return_intermediates (bool): Whether to return intermediates steps
         target_acceptance (float): Default is 0.75
@@ -89,7 +93,7 @@ def mala_mcmc(
     # Reshape the step size if it hasn't been done yet
     if per_chain_step_size and not (isinstance(step_size, torch.Tensor) and len(step_size.shape) > 0):
         step_size = step_size * torch.ones((x.shape[0], *(1,) * (len(x.shape) - 1)), device=x.device)
-    for i in range(n_steps):
+    for i in range(n_steps+n_warmup_steps):
         # Sample the proposal
         x_prop = sample_multivariate_normal_diag(
             batch_size=x.shape[0],
@@ -124,10 +128,10 @@ def mala_mcmc(
             step_size = heuristics_step_size(step_size,
                                              torch.minimum(torch.ones_like(log_acc), torch.exp(log_acc)).mean(), target_acceptance=target_acceptance)
         # Save the sample
-        if return_intermediates:
-            xs[i] = x.clone()
+        if return_intermediates and (i >= n_warmup_steps):
+            xs[i-n_warmup_steps] = x.clone()
             if return_intermediates_gradients:
-                grad_xs[i] = grad_x.clone()
+                grad_xs[i-n_warmup_steps] = grad_x.clone()
     if return_intermediates:
         if return_intermediates_gradients:
             return xs, grad_xs, step_size
@@ -333,7 +337,8 @@ class MCMCScoreEstimator:
                 x0,
                 self.step_size,
                 target_fn,
-                self.n_mcmc_samples if manual_n_steps is None else manual_n_steps,
+                n_steps=self.keep_mcmc_length if manual_n_steps is None else 1,
+                n_warmup_steps=self.n_mcmc_samples - self.keep_mcmc_length if manual_n_steps is None else manual_n_steps-1, 
                 return_intermediates=True,
                 target_acceptance=self.target_acceptance
             )
@@ -378,7 +383,7 @@ class MCMCScoreEstimator:
                              manual_n_steps=50 * self.n_mcmc_samples)[-1].clone()
         # Sample with MCMC starting
         xs = self.sample(x0, self.step_size, lambda x: self.cond_score(x, y, t, sigma, alpha))
-        xs = xs[-self.keep_mcmc_length:]
+        # xs = xs[-self.keep_mcmc_length:]
         # Store the last MCMC step
         if self.use_last_mcmc_iterate:
             self.last_mcmc_iterate = xs[-1]

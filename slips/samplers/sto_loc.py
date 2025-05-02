@@ -127,8 +127,8 @@ def sto_loc_algorithm(alpha, y_init, K, T, sigma, score_est, score_type='nabla_l
     return ret / alpha.alpha(ts[-1])
 
 
-def sample_y_init(shape, sigma, epsilon, alpha, device, langevin_init=False,
-                  n_langevin_steps=10, score_est=None, score_type=None, target_mean=None):
+def sample_y_init(shape, sigma, epsilon, alpha, device, langevin_init=False, n_langevin_steps=10,
+        score_est=None, score_type=None, target_mean=None, n_gd_steps=0, gd_step_size_factor=1.0):
     """Sample the generalized stochastic localization algorithm
 
     Args:
@@ -142,6 +142,8 @@ def sample_y_init(shape, sigma, epsilon, alpha, device, langevin_init=False,
         score_est (function): Score estimator
         score_type (str): Type of score estimator (in 'nabla_log_p_t', 'mc', 'mc_grad', 'mc_reparam', 'mc_grad_reparam') (default is None)
         target_mean (torch.Tensor of shape shape[1:]): Estimation of the target mean
+        n_gd_steps (int): Number of gradient descent steps to finetune the Gaussian approx (default is 0)
+        gd_step_size_factor (float): Multiply the step size by some factor (default is 1.0)
 
     Returns:
         y_init (torch.Tensor of shape shape): Initialization for the generalized stochastic localization algorithm
@@ -152,14 +154,18 @@ def sample_y_init(shape, sigma, epsilon, alpha, device, langevin_init=False,
         target_mean_ = target_mean.to(device)
     else:
         target_mean_ = torch.zeros(shape[1:], device=device)
+    # Get the score at time epsilon
+    score = lambda x : get_nabla_log_pt_from_mc_est(score_est, score_type, x, epsilon, sigma, alpha)
+    # Set the step size (the step size is 1/L where L is the lipschitz constant of the score)
+    step_size = torch.square(sigma) * epsilon / 2.
     # Set y
     y = alpha.alpha(epsilon) * target_mean_ + sigma * math.sqrt(epsilon) * torch.randn(shape, device=device)
+    # Refine with GD
+    if n_gd_steps > 0:
+        for _ in range(n_gd_steps):
+            y += gd_step_size_factor * step_size * score(y)
     # Refine with Langevin or not
     if langevin_init:
-        # Get the score at time epsilon
-        def score(x): return get_nabla_log_pt_from_mc_est(score_est, score_type, x, epsilon, sigma, alpha)
-        # Set the step size (the step size is 1/L where L is the lipschitz constant of the score)
-        step_size = torch.square(sigma) * epsilon / 2.
         # Run ULA chain
         y = ula_mcmc(y.clone(), step_size, score, n_langevin_steps)
         return y.detach()
