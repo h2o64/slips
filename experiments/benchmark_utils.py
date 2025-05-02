@@ -174,12 +174,11 @@ def run_algorithm(algorithm_name, device, n_samples, target_log_prob_and_grad,
         # Compute sigma
         sigma = torch.sqrt(torch.tensor(R**2 - tau**2))
         # Define M and l
-        l = 8
-        M = int((K / 8) * (n_mcmc_steps / 32))
+        M = int(K / 2)
         # Compute the initial point
         y1 = make_init((n_samples, dim), sigma=sigma, device=device)
-        # Run the algorithm (M = K / 4 to compensate for intermediate IS costs)
-        return oat_sampler(y1=y1, sigma=sigma, M=M, n_mcmc_steps=l, sigma_sq_score=sigma_sq_score,
+        # Run the algorithm
+        return oat_sampler(y1=y1, sigma=sigma, M=M, n_mcmc_steps=n_mcmc_steps, sigma_sq_score=sigma_sq_score,
                            step_size=torch.tensor(params['step_size']), friction=torch.tensor(params['friction_eff'] / params['step_size']),
                            make_init=None,
                            verbose=False).detach().cpu()
