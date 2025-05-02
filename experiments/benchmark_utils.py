@@ -307,13 +307,14 @@ def make_target_dist(dist_name, device):
     return target_log_prob_and_grad, target_log_prob, R, tau, dim
 
 
-def compute_metrics(device, dist_name, samples, weights=None):
+def compute_metrics(device, dist_name, samples, skip_high_cost_metrics=False, weights=None):
     """Compute the metrics given approximate samples under a target distribution
 
     Args:
             device (torch.Device): Device to use for computations
             dist_name (str): Name of the target distribution
             samples (torch.Tensor of shape (n_samples, *data_shape)): Approximate samples
+            skip_high_cost_metrics (bool): Whether to skip high cost metrics (default is False)
             weights (torch.Tensor of shape (n_samples,)): Weights (default is None)
 
     Returns:
@@ -322,20 +323,30 @@ def compute_metrics(device, dist_name, samples, weights=None):
 
     if dist_name == '8gaussians':
         target = CircularMixture(device)
-        ret = {'w2': float(compute_wasserstein(target.sample((samples.shape[0],)), samples, weights=weights))}
+        ret = {}
+        if not skip_high_cost_metrics:
+            ret = {'w2': float(compute_wasserstein(target.sample((samples.shape[0],)), samples, weights=weights))}
     elif dist_name == 'rings':
         target = Rings(device=device)
-        ret = {'w2': float(compute_wasserstein(target.sample((samples.shape[0],)), samples, weights=weights))}
+        ret = {}
+        if not skip_high_cost_metrics:
+            ret = {'w2': float(compute_wasserstein(target.sample((samples.shape[0],)), samples, weights=weights))}
     elif dist_name == 'funnel':
         target = Funnel(dim=10, device=device)
-        ret = {'ks_sliced': float(compute_sliced_ks(target.sample((samples.shape[0],)), samples, weights=weights))}
+        ret = {}
+        if not skip_high_cost_metrics:
+            ret = {'ks_sliced': float(compute_sliced_ks(target.sample((samples.shape[0],)), samples, weights=weights))}
     elif 'two_modes_dim_' in dist_name:
         dim = int(dist_name.split('_')[-1])
         target = make_target(a=1.0, dim=dim, device=device)
-        w2_sliced = compute_sliced_wasserstein_fast(target.sample((samples.shape[0],)), samples, weights=weights)
+        if not skip_high_cost_metrics:
+            w2_sliced = compute_sliced_wasserstein_fast(target.sample((samples.shape[0],)), samples, weights=weights)
         mode_weight = compute_relative_weights(target.means[0], target.means[1], samples, weights=weights)
-        mode_weight_error = abs(mode_weight - (2. / 3.))
-        ret = {'w2_sliced': w2_sliced, 'mode_weight_error': mode_weight_error}
+        mode_weight_error = abs(mode_weight - (2./3.))
+        if skip_high_cost_metrics:
+            ret = {'mode_weight_error': mode_weight_error}
+        else:
+            ret = {'w2_sliced': w2_sliced, 'mode_weight_error': mode_weight_error}
     elif (dist_name == 'ionosphere') or (dist_name == 'sonar'):
         with open('slips/distributions/datasets/{}.pkl'.format(dist_name), 'rb') as f:
             d = pickle.load(f)

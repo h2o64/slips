@@ -35,6 +35,9 @@ def data_extractor(filename):
     return algorithm_name, target_name
 
 
+def is_mcmc_algo(algorithm_name): return algorithm_name in ['nuts', 'hmc', 'mala', 'ess']
+
+
 for filepath in tqdm(filepaths):
     # Get the filename
     filename = filepath.split('/')[-1]
@@ -44,13 +47,25 @@ for filepath in tqdm(filepaths):
     with open(filepath, 'rb') as f:
         l = pickle.load(f)
     # Compute the metrics
-    if ('params' in l[0]) or (algorithm_name in ['smc', 'ais']):
+    if ('params' in l[0]) or (algorithm_name in ['smc', 'ais', 'nuts', 'mala', 'ess']):
         for i in range(len(l)):
+            # Compute metrics
             if algorithm_name == 'ais':
                 samples, weights = l[i]['results']
                 l[i]['metrics'] = compute_metrics(device, target_name, samples.to(device), weights=weights.to(device))
             else:
-                l[i]['metrics'] = compute_metrics(device, target_name, l[i]['results'].to(device))
+                l[i]['metrics'] = compute_metrics(device, target_name, l[i]['results'].to(device),
+                                                  skip_high_cost_metrics=is_mcmc_algo(algorithm_name))
+            # Compute ESS and Rhat for MCMC
+            if is_mcmc_algo(algorithm_name):
+                if algorithm_name in ['hmc', 'nuts']:
+                    n_chains = 16
+                else:
+                    n_chains = 64
+                l[i]['metrics']['rhat'] = max([arviz.rhat(l[i]['results'][..., j].view((-1, n_chains)).T.cpu().numpy())
+                                               for j in range(l[i]['results'].shape[-1])])
+                l[i]['metrics']['ess'] = min([arviz.ess(l[i]['results'][..., j].view((-1, n_chains)).T.cpu().numpy())
+                                              for j in range(l[i]['results'].shape[-1])])
             del l[i]['results']
         # Save the data
         with open(args.results_path + '/' + filename, 'wb') as f:
