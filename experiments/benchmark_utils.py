@@ -232,6 +232,33 @@ def run_algorithm(algorithm_name, device, n_samples, target_log_prob_and_grad,
                                  epsilon=epsilon, epsilon_end=epsilon_end, use_exponential_integrator=True,
                                  use_logarithmic_discretization=False, use_snr_discretization=True,
                                  verbose=False).detach().cpu()
+    # MCMC algorithms
+    elif algorithm_name in ['mala', 'hmc', 'nuts', 'ess']:
+        # Step the number of steps and number of chains
+        n_steps = int((K * n_mcmc_steps * n_samples) / 2)
+        n_warmup_steps = int((K * n_mcmc_steps * n_samples) / 2)
+        if algorithm_name == 'hmc':
+            n_steps = int(n_steps / params['trajectory_length'])
+            n_warmup_steps = int(n_warmup_steps / params['trajectory_length'])
+        # Get the initial sample
+        sigma = torch.sqrt(torch.tensor(R**2 + tau**2))
+        x_init = sigma * torch.randn((3, dim), device=device)
+        # Run the MCMC algorithms
+        if algorithm_name == 'mala':
+            xs = mala_mcmc(x_init, step_size=1e-2, log_prob_and_grad=target_log_prob_and_grad,
+                           n_steps=n_warmup_steps+n_steps, return_intermediates=True)[0][-n_steps:].detach().cpu()
+        elif algorithm_name == 'hmc':
+            xs = hmc_mcmc(x_init, target_log_prob, step_size=1e-2, trajectory_length=params['trajectory_length'],
+                          n_steps=n_steps, n_warmup_steps=n_warmup_steps, return_intermediates=True).detach().cpu()
+        elif algorithm_name == 'nuts':
+            xs = nuts_mcmc(x_init, target_log_prob, step_size=1e-2, n_steps=n_steps, n_warmup_steps=n_warmup_steps,
+                           return_intermediates=True).detach().cpu()
+        else:
+            cov = torch.square(sigma) * torch.eye(dim, device=device)
+            xs = ess_mcmc(x_init, target_log_prob, n_steps=n_warmup_steps+n_steps, covariance_matrix=cov,
+                          return_intermediates=True)[-n_steps:].detach().cpu()
+        # Extract the chains
+        return xs.view((-1, dim))
     else:
         raise ValueError('Algorithm {} not implemented.'.format(algorithm_name))
 
