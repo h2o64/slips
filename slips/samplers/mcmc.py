@@ -3,12 +3,18 @@
 # Libraries
 import math
 import torch
+from tqdm import trange
 from .utils import (
     sample_multivariate_normal_diag,
     log_prob_multivariate_normal_diag,
     heuristics_step_size,
     heuristics_step_size_vectorized
 )
+
+# Pyro libraries
+from pyro.infer import NUTS as NUTS_pyro
+from pyro.infer import HMC as HMC_pyro
+from pyro.infer import MCMC as MCMC_pyro
 
 
 def ula_mcmc(x0, step_size, score, n_steps, n_warmup_steps=0, return_intermediates=False,
@@ -173,6 +179,165 @@ def underdamped_langevin_mcmc(x0, step_size, friction, lipschitz_cte, score, n_s
         v = v + u * step_size * psi / 2  # v_{t+1}
         v = zeta1 * v + u * step_size * psi / 2 + math.sqrt(u * (1 - zeta2)) * torch.randn_like(x)  # v_{t+1}
         x = x + step_size * v / 2  # y_{t+1}
+        if return_intermediates:
+            xs[i] = x.clone()
+    if return_intermediates:
+        return xs
+    else:
+        return x
+
+
+def hmc_mcmc(x0, log_prob, n_steps, n_warmup_steps, verbose=False, return_intermediates=False, **kwargs):
+    """Perform multiple steps of Hamiltonian Monte Carlo
+
+    Args:
+        x0 (torch.Tensor of shape (batch_size, *data_shape)): Initial sample
+        log_prob (function): Log-likelihood of the target distribution
+        n_steps (int): Number of steps of the algorithm
+        n_warmup_steps (int): Number of warmup steps
+        verbose (bool): Whether to display display the progress bar (default is False)
+        return_intermediates (bool): Whether to return intermediates steps (default is False)
+        kwargs (dict): Arguments for the HMC kernel
+
+    Returns:
+        x (torch.Tensor of shape (batch_size, *data_shape)): Final sample
+    """
+
+    # Wrap the log_prob
+    def potential_fn(x): return -log_prob(x['points']).sum()
+    # Make the HMC kernel
+    kernel = HMC_pyro(
+        potential_fn=potential_fn,
+        step_size=kwargs.get('step_size', 1),
+        trajectory_length=kwargs.get('trajectory_length', None),
+        num_steps=kwargs.get('num_steps', None),
+        adapt_step_size=kwargs.get('adapt_step_size', True),
+        adapt_mass_matrix=kwargs.get('adapt_mass_matrix', True),
+        full_mass=kwargs.get('full_mass', True),
+        target_accept_prob=kwargs.get('target_accept_prob', 0.8),
+        min_stepsize=kwargs.get('min_stepsize', 1e-10),
+        max_stepsize=kwargs.get('min_stepsize', 1e+10)
+    )
+    # Make the MCMC object
+    mcmc = MCMC_pyro(
+        kernel=kernel,
+        num_samples=n_steps,
+        warmup_steps=n_warmup_steps,
+        initial_params={'points': x0},
+        num_chains=1,
+        disable_progbar=not verbose
+    )
+    # Run the MCMC sampler
+    mcmc.run()
+    # Return the points
+    xs = mcmc.get_samples()['points']
+    if return_intermediates:
+        return xs
+    else:
+        return xs[-1]
+
+
+def nuts_mcmc(x0, log_prob, n_steps, n_warmup_steps, verbose=False, return_intermediates=False, **kwargs):
+    """Perform multiple steps of No U-Turn Sampler
+
+    Args:
+        x0 (torch.Tensor of shape (batch_size, *data_shape)): Initial sample
+        log_prob (function): Log-likelihood of the target distribution
+        n_steps (int): Number of steps of the algorithm
+        n_warmup_steps (int): Number of warmup steps
+        verbose (bool): Whether to display display the progress bar (default is False)
+        return_intermediates (bool): Whether to return intermediates steps (default is False)
+        kwargs (dict): Arguments for the NUTS kernel
+
+    Returns:
+        x (torch.Tensor of shape (batch_size, *data_shape)): Final sample
+    """
+
+    # Wrap the log_prob
+    def potential_fn(x): return -log_prob(x['points']).sum()
+    # Make the NUTS kernel
+    kernel = NUTS_pyro(
+        potential_fn=potential_fn,
+        step_size=kwargs.get('step_size', 1),
+        adapt_step_size=kwargs.get('adapt_step_size', True),
+        adapt_mass_matrix=kwargs.get('adapt_mass_matrix', True),
+        full_mass=kwargs.get('full_mass', True),
+        use_multinomial_sampling=kwargs.get('use_multinomial_sampling', True),
+        target_accept_prob=kwargs.get('target_accept_prob', 0.8)
+    )
+    # Make the MCMC object
+    mcmc = MCMC_pyro(
+        kernel=kernel,
+        num_samples=n_steps,
+        warmup_steps=n_warmup_steps,
+        initial_params={'points': x0},
+        num_chains=1,
+        disable_progbar=not verbose
+    )
+    # Run the MCMC sampler
+    mcmc.run()
+    # Return the points
+    xs = mcmc.get_samples()['points']
+    if return_intermediates:
+        return xs
+    else:
+        return xs[-1]
+
+
+def ess_mcmc(x0, log_prob, n_steps, covariance_matrix=None, return_intermediates=False, verbose=False):
+    """Perform multiple steps of Elliptical Slice Sampling
+
+    Args:
+        x0 (torch.Tensor of shape (batch_size, *data_shape)): Initial sample
+        log_prob (function): Log-likelihood of the target distribution
+        n_steps (int): Number of steps of the algorithm
+        covariance_matrix (torch.Tensor of shape (*data_shape, *data_shape)): Covariance matrix
+        return_intermediates (bool): Whether to return intermediates steps (default is False)
+        verbose (bool): Whether to display display the progress bar (default is False)
+
+    Returns:
+        x (torch.Tensor of shape (batch_size, *data_shape)): Final sample
+    """
+
+    x = x0
+    if return_intermediates:
+        xs = torch.empty((n_steps, *x.shape), device=x.device)
+    if covariance_matrix is not None:
+        covariance_matrix_col = torch.linalg.cholesky(covariance_matrix)
+    if verbose:
+        r = trange(n_steps)
+    else:
+        r = range(n_steps)
+    for i in r:
+        # Choose an ellipse
+        nu = torch.randn_like(x)
+        if covariance_matrix is not None:
+            nu = torch.matmul(covariance_matrix_col.unsqueeze(0), nu.unsqueeze(-1)).squeeze(-1)
+        # Log-likelihood threshold
+        u = torch.rand(x.shape[0], device=x.device)
+        log_y = log_prob(x) + torch.log(u)
+        # Define a bracket
+        theta = - 2.0 * torch.pi * torch.rand((x.shape[0],), device=x.device) + 2.0 * torch.pi
+        theta_min, theta_max = theta.clone() - 2.0 * torch.pi, theta.clone()
+        # Try to accept
+        x_prop = x * torch.cos(theta)[:, None] + nu * torch.sin(theta)[:, None]
+        n_tries = torch.ones((x.shape[0],), device=x.device)
+        mask = log_prob(x_prop) <= log_y
+        while torch.any(mask):
+            # Shrink the bracket
+            theta_min = torch.where(mask & (theta < 0), theta, theta_min)
+            theta_max = torch.where(mask & (theta >= 0), theta, theta_max)
+            r = torch.rand((mask.sum(),), device=x.device)
+            theta[mask] = (theta_min[mask] - theta_max[mask]) * r + theta_max[mask]
+            # Try a new point
+            x_prop[mask] = x[mask] * torch.cos(theta[mask])[:, None] + nu[mask] * torch.sin(theta[mask])[:, None]
+            # Increment the number of tries
+            n_tries[mask] += 1
+            # Update the mask
+            mask[mask.clone()] = log_prob(x_prop[mask]) <= log_y[mask]
+        # Save everyone
+        x = x_prop.clone()
+        # Save the sample
         if return_intermediates:
             xs[i] = x.clone()
     if return_intermediates:
