@@ -128,11 +128,9 @@ def mala_mcmc(
         grad_x.data[mask] = grad_x_prop[mask]
         # Update the step size
         if per_chain_step_size:
-            step_size = heuristics_step_size_vectorized(step_size,
-                                                        torch.minimum(torch.ones_like(log_acc), torch.exp(log_acc)), target_acceptance=target_acceptance)
+            step_size = heuristics_step_size_vectorized(step_size, log_acc, target_acceptance=target_acceptance)
         else:
-            step_size = heuristics_step_size(step_size,
-                                             torch.minimum(torch.ones_like(log_acc), torch.exp(log_acc)).mean(), target_acceptance=target_acceptance)
+            step_size = heuristics_step_size(step_size, log_acc.mean(), target_acceptance=target_acceptance)
         # Save the sample
         if return_intermediates and (i >= n_warmup_steps):
             xs[i-n_warmup_steps] = x.clone()
@@ -541,11 +539,10 @@ class MCMCScoreEstimator:
             else:
                 x0 = y / alpha.alpha(t)
         # Initialize the very first step size of MALA
-        if self.log_prob_and_grad is not None and (isinstance(self.step_size, type(
-                self.default_step_size))) and (self.step_size == self.default_step_size):
+        if self.log_prob_and_grad is not None and (type(self.step_size) == type(self.default_step_size)) and (self.step_size == self.default_step_size):
             # Run for a long time
             x0 = self.sample(x0, self.step_size, lambda x: self.cond_score(x, y, t, sigma, alpha),
-                             manual_n_steps=50 * self.n_mcmc_samples)[-1].clone()
+                             manual_n_steps=50*self.n_mcmc_samples)[-1].clone()
         # Sample with MCMC starting
         xs = self.sample(x0, self.step_size, lambda x: self.cond_score(x, y, t, sigma, alpha))
         # xs = xs[-self.keep_mcmc_length:]

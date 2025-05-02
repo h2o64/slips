@@ -5,26 +5,30 @@ import torch
 import math
 
 
-def heuristics_step_size(stepsize, mean_acceptance, target_acceptance=0.75, factor=1.03, tol=0.01):
+def heuristics_step_size(stepsize, mean_log_acceptance, target_acceptance=0.75, factor=1.01, tol=0.05):
     """Heuristic for adaptative step size"""
-    if mean_acceptance - target_acceptance > tol:
+    if mean_log_acceptance - math.log(target_acceptance) > math.log1p(tol):
         return stepsize * factor
-    if target_acceptance - mean_acceptance > tol:
+    if math.log(target_acceptance) - mean_log_acceptance > math.log1p(tol):
         return stepsize / factor
-    return min(stepsize, 1.0)
+    return stepsize
 
 
-def heuristics_step_size_vectorized(stepsize, mean_acceptance, target_acceptance=0.75, factor=1.03, tol=0.01):
+def heuristics_step_size_vectorized(stepsize, mean_log_acceptance, target_acceptance=0.75, factor=1.01, tol=0.05):
     """Heuristic for adaptative step size in a vectorized fashion"""
-    stepsize = torch.minimum(
-        torch.where((mean_acceptance - target_acceptance > tol).view((-1, *(1,)
-                    * (len(stepsize.shape) - 1))), stepsize * factor, stepsize),
-        torch.ones_like(stepsize)
+    stepsize = torch.where(
+        (mean_log_acceptance - math.log(target_acceptance) > math.log1p(tol)).view(
+            (-1, *(1,) * (len(stepsize.shape) - 1))
+        ),
+        stepsize * factor,
+        stepsize,
     )
-    stepsize = torch.minimum(
-        torch.where((target_acceptance - mean_acceptance > tol).view((-1, *(1,)
-                    * (len(stepsize.shape) - 1))), stepsize / factor, stepsize),
-        torch.ones_like(stepsize)
+    stepsize = torch.where(
+        (math.log(target_acceptance) - mean_log_acceptance > -math.log1p(-tol)).view(
+            (-1, *(1,) * (len(stepsize.shape) - 1))
+        ),
+        stepsize / factor,
+        stepsize,
     )
     return stepsize
 
