@@ -49,63 +49,41 @@ target_names = ['8gaussians', 'rings', 'funnel', 'two_modes_dim_8', 'two_modes_d
 
 # Hyper-parameter ranges
 hyper_parameter_ranges_default = {
+    'hmc': {
+        'trajectory_length': [4, 8, 12, 16],
+    },
     'mnm': {
-        'step_size': [0.03, 1.0],
-        'friction_eff': [0.0625, 0.05]
+        'step_size': [0.03, 0.1, 0.3, 1.0],
+        'friction_eff': [0.0625, 0.125, 0.25, 0.5, 1.0]
     },
     'rdmc': {
-        'T': [-math.log(0.95), -math.log(0.9), -math.log(0.8), -math.log(0.7)]
+        'T': [-math.log(0.70), -math.log(0.72), -math.log(0.75), -math.log(0.77), -math.log(0.79), -math.log(0.81), -math.log(0.84),
+              -math.log(0.86), -math.log(0.88), -math.log(0.90), -math.log(0.93), -math.log(0.95)]
     },
     'sto_loc_classic': {
         'T': [150, 300],  # Corresponding log-SNR = [5.0, 5.7]
-        'epsilon': [0.1, 0.2, 0.4, 1.0, 1.2],  # Corresponding log-SNR = [-2.30, -1.61, -0.92, 0.00, 0.18]
+        # Corresponding log-SNR = [-2.53, -1.97, -1.51, -0.99, -0.49, 0.00]
+        'epsilon': [0.08, 0.14, 0.22, 0.37, 0.61, 1.00]
     },
     'sto_loc_geometric_1_1': {
         'epsilon_end': [9.90e-03, 6.62e-03],  # Corresponding log-SNR = [4.6, 5.0]
-        'epsilon': [0.1, 0.15, 0.20],  # Corresponding log-SNR = [-2.2, -1.73, -1.3]
+        # Corresponding log-SNR = [-2.44, -1.99, -1.52, -0.99, -0.49, 0.00]
+        'epsilon': [0.08, 0.12, 0.18, 0.27, 0.38, 0.50]
     },
     'sto_loc_geometric_2_1': {
         'epsilon_end': [9.80e-03, 6.58e-03],  # Corresponding log-SNR = [4.6, 5.0],
-        'epsilon': [0.30, 0.35, 0.45]  # Corresponding log-SNR = [-2.05, -1.67, -1.0]
+        # Corresponding log-SNR = [-2.51, -1.97, -1.48, -1.02, -0.49, -0.01]
+        'epsilon': [0.07, 0.11, 0.16, 0.22, 0.30, 0.38]
     }
 }
 hyper_parameter_ranges = {algorithm_name: {} for algorithm_name in hyper_parameter_ranges_default.keys()}
-for algorithm_name in ['mnm', 'rdmc']:
+for algorithm_name in hyper_parameter_ranges_default.keys():
     for target_name in target_names:
         hyper_parameter_ranges[algorithm_name][target_name] = hyper_parameter_ranges_default[algorithm_name]
 
 for algorithm_name in ['sto_loc_classic', 'sto_loc_geometric_1_1', 'sto_loc_geometric_2_1']:
     for target_name in ['8gaussians', 'rings', 'funnel']:
         hyper_parameter_ranges[algorithm_name][target_name] = hyper_parameter_ranges_default[algorithm_name]
-
-for target_name in list(filter(lambda x: 'phi_four' in x, target_names)):
-    hyper_parameter_ranges['sto_loc_classic'][target_name] = {
-        'T': [300, 450],  # Corresponding log-SNR = [5.7, 6.1]
-        'epsilon': [0.8, 1.0, 1.2, 1.4, 1.8],  # Corresponding log-SNR = [-0.22, 0.00, 0.18, 0.34, 0.59]
-    }
-    hyper_parameter_ranges['sto_loc_geometric_1_1'][target_name] = {
-        'epsilon_end': [3.32e-03, 2.22e-03],  # Corresponding log-SNR = [5.7, 6.1]
-        'epsilon': [0.30, 0.35, 0.40, 0.45],  # Corresponding log-SNR = [-0.85, -0.62, -0.41, -0.2]
-    }
-    hyper_parameter_ranges['sto_loc_geometric_2_1'][target_name] = {
-        'epsilon_end': [3.31e-03, 2.21e-03],  # Corresponding log-SNR = [5.7, 6.1]
-        'epsilon': [0.40, 0.45, 0.50, 0.55],  # Corresponding log-SNR = [-1.32, -1.0, -0.69, -0.4]
-    }
-
-for target_name in ['sonar', 'ionosphere'] + list(filter(lambda x: 'two_modes' in x, target_names)):
-    hyper_parameter_ranges['sto_loc_classic'][target_name] = {
-        'T': [150],  # Corresponding log-SNR = [5.0]
-        'epsilon': [0.03, 0.05, 0.1, 0.2, 0.4],  # Corresponding log-SNR = [-3.51, -3.00, -2.30, -1.61, -0.92]
-    }
-    hyper_parameter_ranges['sto_loc_geometric_1_1'][target_name] = {
-        'epsilon_end': [6.62e-03],  # Corresponding log-SNR = [5.0]
-        'epsilon': [0.03, 0.05, 0.1, 0.15, 0.25],  # Corresponding log-SNR = [-3.48, -2.94, -2.2, -1.73, -1.1]
-    }
-    hyper_parameter_ranges['sto_loc_geometric_2_1'][target_name] = {
-        'epsilon_end': [6.58e-03],  # Corresponding log-SNR = [5.0]
-        'epsilon': [0.15, 0.20, 0.25, 0.35, 0.45],  # Corresponding log-SNR = [-3.63, -3.0, -2.48, -1.67, -1.0]
-    }
-
 
 def run_algorithm(algorithm_name, device, n_samples, target_log_prob_and_grad,
                   target_log_prob, R, tau, dim, params, K, n_mcmc_steps):
@@ -201,7 +179,7 @@ def run_algorithm(algorithm_name, device, n_samples, target_log_prob_and_grad,
     # Sto loc
     elif 'sto_loc' in algorithm_name:
         # Compute sigma
-        sigma = torch.sqrt(torch.tensor((R / math.sqrt(dim))**2 + tau**2))
+        sigma = torch.sqrt(torch.tensor(R**2 + tau**2))
         # Prepare the score estimator
         score_est = MCMCScoreEstimator(
             reparametrize=False,
@@ -282,29 +260,29 @@ def make_target_dist(dist_name, device):
         target = CircularMixture(device)
         def target_log_prob_and_grad(x): return log_prob_and_grad(target.log_prob, x)
         target_log_prob = target.log_prob
-        R = float(torch.linalg.norm(target.means[0], dim=-1))
-        tau = float(torch.sqrt(target.covs[0, 0, 0]))
         dim = 2
+        R = torch.linalg.norm(target.means[0], dim=-1) / math.sqrt(dim)
+        tau = float(torch.sqrt(target.covs[0, 0, 0]))
     elif dist_name == 'rings':
         target = Rings(device=device)
         def target_log_prob_and_grad(x): return log_prob_and_grad(target.log_prob, x)
         target_log_prob = target.log_prob
-        R = 4.
-        tau = 0.15
         dim = 2
+        R = 4. / dim
+        tau = 0.15
     elif dist_name == 'funnel':
         target = Funnel(dim=10, device=device)
         def target_log_prob_and_grad(x): return log_prob_and_grad(target.log_prob, x)
         target_log_prob = target.log_prob
-        R = 2.12
-        tau = 0.0
         dim = 10
+        R = 2.1
+        tau = 0.0
     elif 'two_modes_dim_' in dist_name:
         dim = int(dist_name.split('_')[-1])
         target = make_target(a=1.0, dim=dim, device=device)
         def target_log_prob_and_grad(x): return log_prob_and_grad(target.log_prob, x)
         target_log_prob = target.log_prob
-        R = (4. / 3.) * math.sqrt(dim)
+        R = math.sqrt(24/27)
         tau = float(torch.sqrt(target.covs[0, 0, 0]))
     elif (dist_name == 'ionosphere') or (dist_name == 'sonar'):
         with open('slips/distributions/datasets/{}.pkl'.format(dist_name), 'rb') as f:
@@ -313,7 +291,7 @@ def make_target_dist(dist_name, device):
         target = LogisticRegression(X=X, y=y, device=device)
         def target_log_prob_and_grad(x): return log_prob_and_grad(target.log_prob, x)
         target_log_prob = target.log_prob
-        R = 2.5
+        R = 1.1
         tau = 0.0
         dim = X.shape[-1] + 1
     elif 'phi_four' in dist_name:
@@ -322,8 +300,8 @@ def make_target_dist(dist_name, device):
         target = PhiFour(a=0.1, b=b, dim_grid=dim, dim_phys=1, beta=20.)
         def target_log_prob(x): return -target.beta * target.U(x)
         def target_log_prob_and_grad(x): return log_prob_and_grad(target_log_prob, x)
-        R = 4.5
-        tau = 2e-1
+        R = 0.85
+        tau = 0.15
     else:
         raise ValueError('Target distribution {} not found.'.format(dist_name))
     return target_log_prob_and_grad, target_log_prob, R, tau, dim
